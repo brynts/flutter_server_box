@@ -1,0 +1,71 @@
+# Nama workflow
+name: Build Flutter iOS App
+
+# Kapan workflow ini akan dijalankan
+on:
+  # 1. Saat ada push (commit) ke branch 'main'
+  push:
+    branches:
+      - main
+  
+  # 2. (PENTING) Memungkinkan Anda menjalankan workflow ini secara manual
+  #     dan menambahkan input kustom
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: 'Repo (format: user/repo). Biarkan kosong untuk repo ini.'
+        required: false
+        # Kita tidak set default, jadi dia akan pakai repo ini
+        default: ''
+      ref:
+        description: 'Branch, tag, or commit. Biarkan kosong untuk default branch.'
+        required: false
+        # Kita tidak set default, jadi dia akan pakai branch 'main'
+        default: ''
+
+# Daftar pekerjaan (jobs) yang akan dijalankan
+jobs:
+  build-ios-app:
+    # HARUS menggunakan server macOS
+    runs-on: macos-latest
+
+    steps:
+      # 1. Meng-checkout (mengunduh) kode
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Jika input 'repository' diisi (tidak kosong), gunakan itu.
+          # Jika kosong, 'actions/checkout' otomatis pakai repo ini.
+          repository: ${{ github.event.inputs.repository || '' }}
+          
+          # Jika input 'ref' diisi (tidak kosong), gunakan itu.
+          # Jika kosong, 'actions/checkout' otomatis pakai branch default 
+          # yang dipilih di UI ('main').
+          ref: ${{ github.event.inputs.ref || '' }}
+
+      # 2. Setup Flutter
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      # 3. Mengunduh semua package/dependency Flutter
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      # 4. Build file .app (TANPA code signing)
+      - name: Build Flutter iOS (no signing)
+        run: flutter build ios --release --no-codesign
+
+      # 5. Arsip .app menjadi .zip (karena .app adalah folder)
+      - name: Archive .app bundle
+        run: |
+          cd build/ios/Release-iphoneos/
+          zip -r Runner.app.zip Runner.app
+          
+      # 6. Upload file .zip yang berisi .app sebagai artifact
+      - name: Upload .app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-app-bundle
+          path: build/ios/Release-iphoneos/Runner.app.zip
